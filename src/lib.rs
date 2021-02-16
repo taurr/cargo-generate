@@ -147,8 +147,8 @@ pub struct Args {
     /// Pass template values through a file
     /// Values should be in the format `key=value`, one per line
 
-    #[structopt(long)]
-    pub template_values_file: Option<String>,
+    #[structopt(long, number_of_values = 1)]
+    pub template_values_file: Option<Vec<String>>,
     /// If silent mode is set all variables will be
     /// extracted from the template_values_file.
     /// If a value is missing the project generation will fail
@@ -207,11 +207,23 @@ pub fn generate(mut args: Args) -> Result<()> {
 
 fn create_git(args: Args, name: &ProjectName) -> Result<()> {
     let force = args.force;
+    use itertools::*;
     let template_values = args
         .template_values_file
-        .as_ref()
-        .map(|p| Path::new(p))
-        .map_or(Ok(Default::default()), |path| get_config_file_values(path))?;
+        .iter()
+        .flat_map(|v| v.iter())
+        .map(|path| {
+            get_config_file_values(path)
+                .with_context(|| format!("Failed to read values from file: {}", path))
+        })
+        .fold_ok(
+            Default::default(),
+            |mut m1: HashMap<String, toml::Value>, m2| {
+                m1.extend(m2.into_iter());
+                m1
+            },
+        )?;
+
     let git_config = GitConfig::new_abbr(
         &args
             .git
@@ -245,7 +257,10 @@ fn create_git(args: Args, name: &ProjectName) -> Result<()> {
     Ok(())
 }
 
-fn get_config_file_values(path: &Path) -> Result<HashMap<String, toml::Value>> {
+fn get_config_file_values<T>(path: T) -> Result<HashMap<String, toml::Value>>
+where
+    T: AsRef<Path>,
+{
     match fs::read_to_string(path) {
         Ok(ref contents) => toml::from_str::<ConfigValues>(contents)
             .map(|v| v.values)

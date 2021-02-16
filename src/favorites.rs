@@ -2,7 +2,7 @@ use crate::{
     app_config::{app_config_path, AppConfig, FavoriteConfig},
     Args,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 
 pub(crate) fn list_favorites(args: &Args) -> Result<()> {
     let path = &app_config_path(&args.config)?;
@@ -42,7 +42,7 @@ pub(crate) fn resolve_favorite(args: &mut Args) -> Result<()> {
     let favorite_name = args
         .favorite
         .as_ref()
-        .ok_or_else(|| anyhow!("Please specify either --git option, or a predefined favorite"))?;
+        .with_context(|| "Please specify either --git option, or a predefined favorite")?;
 
     let app_config_path = app_config_path(&args.config)?;
     let app_config = AppConfig::from_path(app_config_path.as_path())?;
@@ -57,6 +57,11 @@ pub(crate) fn resolve_favorite(args: &mut Args) -> Result<()> {
             )
         })?;
 
+    if let Some(values) = favorite.template_values.clone() {
+        let mut favorite_values = vec![values];
+        favorite_values.append(&mut args.template_values_file.take().unwrap_or_default());
+        args.template_values_file = Some(favorite_values);
+    }
     args.git = favorite.git.clone();
     args.branch = args
         .branch

@@ -1,10 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 pub(crate) const CONFIG_FILE_NAME: &str = "cargo-generate";
 
@@ -30,7 +26,8 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub(crate) fn from_path(path: &Path) -> Result<AppConfig> {
+    pub(crate) fn from_path(path: &Option<PathBuf>) -> Result<AppConfig> {
+        let path = AppConfig::resolve_config_path(path)?;
         if path.exists() {
             let cfg = fs::read_to_string(path)?;
             Ok(if cfg.trim().is_empty() {
@@ -42,17 +39,17 @@ impl AppConfig {
             Ok(Default::default())
         }
     }
-}
 
-pub(crate) fn app_config_path(path: &Option<PathBuf>) -> Result<PathBuf> {
-    path.clone()
-        .or_else(|| home::cargo_home().map_or(None, |h| Some(h.join(CONFIG_FILE_NAME))))
-        .with_context(|| {
-            format!(
-                r#"
-Unable to resolve path for configuration file.
-Use --config option, or place {} in $CARGO_HOME."#,
-                CONFIG_FILE_NAME
-            )
-        })
+    fn resolve_config_path(path: &Option<PathBuf>) -> Result<PathBuf> {
+        path.clone()
+            .or_else(|| home::cargo_home().map_or(None, |h| Some(h.join(CONFIG_FILE_NAME))))
+            .with_context(|| {
+                format!(
+                    r#"
+    Unable to resolve path for configuration file.
+    Use --config option, or place {} in $CARGO_HOME."#,
+                    CONFIG_FILE_NAME
+                )
+            })
+    }
 }

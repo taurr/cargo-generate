@@ -1,4 +1,10 @@
+use anyhow::{anyhow, Result};
+use console::style;
 use heck::{KebabCase, SnakeCase};
+
+use crate::emoji;
+use crate::interactive;
+use crate::Args;
 
 /// Stores user inputted name and provides convenience methods
 /// for handling casing.
@@ -7,8 +13,23 @@ pub(crate) struct ProjectName {
 }
 
 impl ProjectName {
-    pub(crate) fn new(name: impl Into<String>) -> ProjectName {
-        ProjectName {
+    pub fn from_options(args: &Args) -> Result<Self> {
+        match args.name {
+            Some(ref n) => Ok(ProjectName::new(n)),
+            None if !args.silent => Ok(ProjectName::new(interactive::name()?)),
+            None => Err(anyhow!(
+                "{} {} {}",
+                emoji::ERROR,
+                style("Project Name Error:").bold().red(),
+                style("Option `--silent` provided, but project name was not set. Please use `--project-name`.")
+                    .bold()
+                    .red(),
+            )),
+        }
+    }
+
+    pub(crate) fn new(name: impl Into<String>) -> Self {
+        Self {
             user_input: name.into(),
         }
     }

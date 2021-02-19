@@ -91,16 +91,19 @@ mod progressbar;
 mod project_variables;
 mod projectname;
 mod template;
+mod template_values;
 
+use crate::app_config::AppConfig;
 use crate::git::GitConfig;
 use crate::projectname::ProjectName;
+use crate::template_values::TemplateValues;
+
 use anyhow::{Context, Result};
-use config::{Config, ConfigValues, CONFIG_FILE_NAME};
+use config::{Config, CONFIG_FILE_NAME};
 use console::style;
 use favorites::{list_favorites, resolve_favorite};
 use std::{
-    collections::HashMap,
-    env, fs,
+    env,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -183,52 +186,31 @@ impl FromStr for Vcs {
 }
 
 pub fn generate(mut args: Args) -> Result<()> {
+    let app_config = AppConfig::from_path(&args.config)?;
+
     if args.list_favorites {
-        return list_favorites(&args);
+        list_favorites(&app_config, &args);
+        return Ok(());
     }
-    resolve_favorite(&mut args)?;
 
-    let name = match args.name {
-        Some(ref n) => ProjectName::new(n),
-        None if !args.silent => ProjectName::new(interactive::name()?),
-        None => anyhow::bail!(
-            "{} {} {}",
-            emoji::ERROR,
-            style("Project Name Error:").bold().red(),
-            style("Option `--silent` provided, but project name was not set. Please use `--project-name`.")
-                .bold()
-                .red(),
-        ),
-    };
+    let _favorite_cfg = resolve_favorite(&app_config, &mut args)?;
 
-    create_git(args, &name)?;
+    let name = ProjectName::from_options(&args)?;
+    let template_values = TemplateValues::collect_from_files(&args)?;
+
+    create_git(args, &name, &template_values)?;
+
     Ok(())
 }
 
-fn create_git(args: Args, name: &ProjectName) -> Result<()> {
+fn create_git(args: Args, name: &ProjectName, template_values: &TemplateValues) -> Result<()> {
     let force = args.force;
-    use itertools::*;
-    let template_values = args
-        .template_values_file
-        .iter()
-        .flat_map(|v| v.iter())
-        .map(|path| {
-            get_config_file_values(path)
-                .with_context(|| format!("Failed to read values from file: {}", path))
-        })
-        .fold_ok(
-            Default::default(),
-            |mut m1: HashMap<String, toml::Value>, m2| {
-                m1.extend(m2.into_iter());
-                m1
-            },
-        )?;
 
     let git_config = GitConfig::new_abbr(
         &args
             .git
             .clone()
-            .with_context(|| "Missing option git, or a favorite")?,
+            .context("Missing option git, or a favorite")?,
         args.branch.to_owned(),
     )?;
 
@@ -255,23 +237,6 @@ fn create_git(args: Args, name: &ProjectName) -> Result<()> {
         );
     }
     Ok(())
-}
-
-fn get_config_file_values<T>(path: T) -> Result<HashMap<String, toml::Value>>
-where
-    T: AsRef<Path>,
-{
-    match fs::read_to_string(path) {
-        Ok(ref contents) => toml::from_str::<ConfigValues>(contents)
-            .map(|v| v.values)
-            .map_err(|e| e.into()),
-        Err(e) => anyhow::bail!(
-            "{} {} {}",
-            emoji::ERROR,
-            style("Values File Error:").bold().red(),
-            style(e).bold().red(),
-        ),
-    }
 }
 
 fn create_project_dir(name: &ProjectName, force: bool) -> Option<PathBuf> {
@@ -302,7 +267,7 @@ fn create_project_dir(name: &ProjectName, force: bool) -> Option<PathBuf> {
 
 fn progress(
     name: &ProjectName,
-    template_values: &HashMap<String, toml::Value>,
+    template_values: &TemplateValues,
     dir: &Path,
     branch: &str,
     args: &Args,

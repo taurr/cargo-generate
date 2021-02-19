@@ -1,13 +1,11 @@
 use crate::{
-    app_config::{app_config_path, AppConfig, FavoriteConfig},
+    app_config::{AppConfig, FavoriteConfig},
     Args,
 };
 use anyhow::{Context, Result};
 
-pub(crate) fn list_favorites(args: &Args) -> Result<()> {
-    let path = &app_config_path(&args.config)?;
-    println!("Listing favorites defined in: {}", path.as_path().display());
-    let app_config = AppConfig::from_path(path)?;
+pub(crate) fn list_favorites(app_config: &AppConfig, args: &Args) {
+    println!("Listing favorites");
 
     let data = {
         let mut d = app_config
@@ -30,30 +28,28 @@ pub(crate) fn list_favorites(args: &Args) -> Result<()> {
             conf.description.as_ref().cloned().unwrap_or_default()
         );
     });
-
-    Ok(())
 }
 
-pub(crate) fn resolve_favorite(args: &mut Args) -> Result<()> {
+pub(crate) fn resolve_favorite<'a>(
+    app_config: &'a AppConfig,
+    args: &mut Args,
+) -> Result<Option<&'a FavoriteConfig>> {
     if args.git.is_some() {
-        return Ok(());
+        return Ok(None);
     }
 
     let favorite_name = args
         .favorite
         .as_ref()
-        .with_context(|| "Please specify either --git option, or a predefined favorite")?;
+        .context("Please specify either --git option, or a predefined favorite")?;
 
-    let app_config_path = app_config_path(&args.config)?;
-    let app_config = AppConfig::from_path(app_config_path.as_path())?;
     let favorite = app_config
         .favorites
         .get(favorite_name.as_str())
         .with_context(|| {
             format!(
-                "Unknown favorite: {}\nFavorites must be defined in the configuration file at: {}",
+                "Unknown favorite: {}\nFavorites must be defined in the configuration file",
                 favorite_name,
-                app_config_path.display()
             )
         })?;
 
@@ -69,5 +65,5 @@ pub(crate) fn resolve_favorite(args: &mut Args) -> Result<()> {
         .or_else(|| favorite.branch.as_ref())
         .cloned();
 
-    Ok(())
+    Ok(Some(favorite))
 }

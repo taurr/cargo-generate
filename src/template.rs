@@ -1,16 +1,16 @@
-use crate::authors;
 use crate::config::TemplateConfig;
 use crate::emoji;
 use crate::include_exclude::*;
 use crate::projectname::ProjectName;
+use crate::{authors, template_values::TemplateValues};
 use anyhow::{Context, Result};
 use console::style;
 use heck::{CamelCase, KebabCase, SnakeCase};
 use indicatif::ProgressBar;
 use liquid_core::{Filter, FilterReflection, Object, ParseFilter, Runtime, Value, ValueView};
+use std::env;
 use std::fs;
 use std::path::Path;
-use std::{collections::HashMap, env};
 use walkdir::{DirEntry, WalkDir};
 
 fn engine() -> liquid::Parser {
@@ -105,7 +105,7 @@ impl Filter for SnakeCaseFilter {
 
 pub(crate) fn substitute(
     name: &ProjectName,
-    template_values: &HashMap<String, toml::Value>,
+    template_values: &TemplateValues,
     force: bool,
 ) -> Result<Object> {
     let project_name = if force { name.raw() } else { name.kebab_case() };
